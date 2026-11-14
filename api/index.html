@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checker — دليل الأنشطة التجارية من خرائط قوقل</title>
+<meta name="description" content="ابحث عن الأنشطة التجارية في مدن السعودية واسحب الاسم والجوال والموقع وحسابات التواصل من خرائط قوقل في جدول واحد.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2319c6b7'/><path d='M16 6a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z' fill='%230b1220'/></svg>">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#04121a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span>
+      <span>Checker<small>دليل الأنشطة التجارية · خرائط قوقل</small></span>
+    </a>
+    <nav class="nav">
+      <a href="#search" class="active">البحث</a>
+      <a href="#results" class="hide-m">النتائج</a>
+      <a href="#how" class="hide-m">كيف يعمل</a>
+    </nav>
+    <span class="pill"><span class="dot"></span> Places API</span>
+  </div>
+</header>
+
+<main class="wrap" id="top">
+
+  <section class="hero">
+    <div class="reveal in">
+      <h1>كل نشاط تجاري في مدينتك،<br><em>في جدول واحد.</em></h1>
+      <p>اختر المنطقة ثم المدينة ثم نوع النشاط، واضغط بحث. يسحب Checker البيانات مباشرة من خرائط قوقل: اسم المحل، رقم الجوال، ورابط «الموقع» كما سجّله صاحب النشاط — ويُصنّفه تلقائياً إلى موقع إلكتروني أو تيك توك أو انستقرام أو غيرها.</p>
+    </div>
+    <div class="stats reveal in">
+      <div class="stat" style="--c:var(--teal)"><b id="stRegions">13</b><span>منطقة</span></div>
+      <div class="stat" style="--c:var(--sky)"><b id="stCities">—</b><span>مدينة ومحافظة</span></div>
+      <div class="stat" style="--c:var(--gold)"><b id="stFound">0</b><span>نتيجة هذا البحث</span></div>
+    </div>
+  </section>
+
+  <section class="panel reveal in" id="search">
+    <form class="filters" id="filterForm" autocomplete="off">
+      <div class="field">
+        <label for="region"><i>١</i> المنطقة</label>
+        <div class="sel"><select id="region"><option value="">اختر المنطقة…</option></select></div>
+      </div>
+      <div class="field">
+        <label for="city"><i>٢</i> المدينة</label>
+        <div class="sel"><select id="city" disabled><option value="">اختر المنطقة أولاً</option></select></div>
+      </div>
+      <div class="field">
+        <label for="type"><i>٣</i> نوع النشاط</label>
+        <div class="sel"><select id="type"><option value="">اختر النشاط…</option></select></div>
+      </div>
+      <button class="btn btn-primary" id="goBtn" type="submit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span>بحث</span>
+      </button>
+    </form>
+    <div class="quick" id="quickTypes"><span>شائع:</span></div>
+    <div class="quick" id="recent" hidden><span>آخر بحث:</span></div>
+  </section>
+
+  <section id="results">
+    <div class="toolbar">
+      <div class="count" id="count">لم يبدأ البحث بعد</div>
+      <div class="grow"></div>
+      <div class="legend" id="legend"></div>
+      <div class="search">
+        <input id="q" type="search" placeholder="تصفية النتائج بالاسم أو الجوال…" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="csvBtn" disabled title="تنزيل النتائج كملف Excel/CSV">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg> CSV
+      </button>
+      <button class="btn btn-ghost btn-sm" id="clearBtn" disabled>مسح</button>
+    </div>
+
+    <div class="tablewrap">
+      <div class="tscroll">
+        <table>
+          <thead>
+            <tr>
+              <th class="idx">#</th>
+              <th data-k="name">اسم المحل <span class="arr">↕</span></th>
+              <th data-k="phone">رقم الجوال <span class="arr">↕</span></th>
+              <th data-k="link">الحساب / الموقع <span class="arr">↕</span></th>
+              <th data-k="rating">التقييم <span class="arr">↕</span></th>
+              <th>الخريطة</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div id="stateBox"></div>
+      </div>
+      <div class="more" id="moreBox" hidden>
+        <button class="btn btn-ghost btn-sm" id="moreBtn">تحميل المزيد (حتى 60 نتيجة)</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="how" class="reveal" style="margin-top:34px">
+    <div class="panel" style="padding:22px">
+      <h3 style="margin:0 0 10px;font-size:18px">كيف يعمل؟</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;color:var(--ink-2);font-size:14px;line-height:1.8">
+        <div><b style="color:var(--teal)">١ · اختيار الموقع</b><br>قائمة المناطق والمدن مأخوذة من التقسيم الإداري الرسمي للسعودية (13 منطقة وأكثر من 4,500 مدينة).</div>
+        <div><b style="color:var(--sky)">٢ · استدعاء قوقل</b><br>طلب إلى Places API (New) عبر دالة Vercel تُخفي مفتاح الـ API. كل صفحة تعيد حتى 20 نتيجة، وبحد أقصى 60 نتيجة للبحث الواحد.</div>
+        <div><b style="color:var(--gold)">٣ · تصنيف الرابط</b><br>حقل «الموقع» في قوقل قد يكون موقعاً أو حساب تواصل. يُفحص نطاق الرابط ويُصنّف تلقائياً: تيك توك، انستقرام، X، سناب، واتساب… أو موقع إلكتروني.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    البيانات مقدّمة من Google Places API وتظهر كما سجّلها أصحاب الأنشطة.
+    • قائمة المدن: بيانات العنوان الوطني المفتوحة. • الاستضافة: Vercel + GitHub.
+  </footer>
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="ksa.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

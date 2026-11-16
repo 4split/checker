@@ -28,8 +28,9 @@ const KINDS = {
 const ICON_PHONE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 4h4l2 5-2.5 1.5a12 12 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>';
 const ICON_MAP='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
 const ICON_COPY='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+const ICON_STAR='<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
 
-const state={rows:[],nextToken:null,sortK:null,sortDir:1,filter:"",hidden:new Set(),loading:false,lastQuery:null};
+const state={rows:[],nextToken:null,sortK:null,sortDir:1,filter:"",hidden:new Set(),loading:false,lastQuery:null,apiCalls:0,isGrid:false};
 const regionSel=$("#region"),citySel=$("#city"),typeSel=$("#type");
 
 function fillRegions(){
@@ -68,7 +69,7 @@ Object.entries(KINDS).forEach(([k,v])=>{
 
 $("#filterForm").addEventListener("submit",e=>{e.preventDefault();search(false);});
 $("#moreBtn").addEventListener("click",()=>search(true));
-$("#clearBtn").addEventListener("click",()=>{state.rows=[];state.nextToken=null;state.lastQuery=null;render();setState("idle");$("#count").textContent="لم يبدأ البحث بعد";$("#stFound").textContent="0";});
+$("#clearBtn").addEventListener("click",()=>{state.rows=[];state.nextToken=null;state.lastQuery=null;state.isGrid=false;render();setState("idle");$("#count").textContent="لم يبدأ البحث بعد";$("#stFound").textContent="0";updateApiCounter();});
 $("#q").addEventListener("input",e=>{state.filter=e.target.value.trim();render();});
 $("#csvBtn").addEventListener("click",exportCSV);
 document.querySelectorAll("thead th[data-k]").forEach(th=>th.addEventListener("click",()=>{
@@ -83,8 +84,13 @@ async function search(append){
   if(state.loading)return;
   if(regionSel.value===""){toast("اختر المنطقة");regionSel.focus();return;}
   if(!typeSel.value){toast("اختر نوع النشاط");typeSel.focus();return;}
-  const params=new URLSearchParams({region:regionSel.options[regionSel.selectedIndex].text,city:citySel.value||"",type:typeSel.value});
-  if(append&&state.nextToken)params.set("pageToken",state.nextToken);
+
+  const isFullSearch=citySel.value==="" || citySel.options[citySel.selectedIndex].text.startsWith("كل مدن");
+  state.isGrid=isFullSearch;
+  const action=isFullSearch?"grid":"search";
+  const params=new URLSearchParams({action,region:regionSel.options[regionSel.selectedIndex].text,city:citySel.value||"",type:typeSel.value});
+  if(append&&state.nextToken&&!isFullSearch)params.set("pageToken",state.nextToken);
+
   state.loading=true;setLoading(true);
   if(!append){state.rows=[];state.nextToken=null;setState("loading");}
   try{
@@ -94,6 +100,8 @@ async function search(append){
     const seen=new Set(state.rows.map(x=>x.id));
     (data.places||[]).forEach(p=>{if(!seen.has(p.id))state.rows.push(p);});
     state.nextToken=data.nextPageToken||null;
+    state.apiCalls+=data.totalRequests||1;
+    updateApiCounter();
     state.lastQuery={region:regionSel.options[regionSel.selectedIndex].text,city:citySel.value||"كل المدن",type:typeSel.value};
     saveRecent(state.lastQuery);
     render();
@@ -102,6 +110,17 @@ async function search(append){
     if(!append&&state.rows.length)$("#results").scrollIntoView({behavior:"smooth",block:"start"});
   }catch(err){setState("error",err.message);}
   finally{state.loading=false;setLoading(false);}
+}
+
+async function fetchDetails(id,row){
+  if(row._loaded)return;
+  row._loading=true;render();
+  try{
+    const r=await fetch(`/api/search?action=details&id=${id}`);
+    const d=await r.json();
+    if(r.ok){row.phone=d.phone||"";row.tel=d.tel||"";row.rating=d.rating??null;row.reviews=d.reviews??null;row._loaded=true;}
+  }catch{}
+  row._loading=false;render();
 }
 
 function setLoading(on){
@@ -126,30 +145,55 @@ function render(){
     tr.appendChild(el("td","idx",String(i+1)));
     const badge=r.status==="OPERATIONAL"?'<span class="badge open">يعمل</span>':r.status==="CLOSED_TEMPORARILY"?'<span class="badge closed">مغلق مؤقتاً</span>':r.status==="CLOSED_PERMANENTLY"?'<span class="badge closed">مغلق نهائياً</span>':"";
     const tdN=el("td","name",`<span>${esc(r.name)}</span><span class="sub"><span class="cat">${esc(r.category||"")}</span>${badge}<span>${esc(shortAddr(r.address))}</span></span>`);tdN.dataset.l="المحل";tr.appendChild(tdN);
+
+    // رقم الجوال + زر التفاصيل
     const tdP=el("td");tdP.dataset.l="الجوال";
-    if(r.phone){const a=el("a","phone",ICON_PHONE+`<span>${esc(r.phone)}</span>`);a.href="tel:"+(r.tel||r.phone);const cp=el("button","copy",ICON_COPY);cp.title="نسخ الرقم";cp.onclick=()=>copy(r.phone);tdP.append(a,cp);}
-    else tdP.appendChild(el("span","none","—"));
+    if(r.phone){
+      const a=el("a","phone",ICON_PHONE+`<span>${esc(r.phone)}</span>`);a.href="tel:"+(r.tel||r.phone);
+      const cp=el("button","copy",ICON_COPY);cp.title="نسخ الرقم";cp.onclick=()=>copy(r.phone);
+      tdP.append(a,cp);
+    } else if(r._loading){
+      tdP.innerHTML='<span class="skel" style="width:120px"></span>';
+    } else {
+      const btn=el("button","btn btn-sm btn-ghost",'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> تفاصيل');
+      btn.onclick=()=>fetchDetails(r.id,r);
+      tdP.appendChild(btn);
+    }
     tr.appendChild(tdP);
+
+    // الحسابات
     const tdL=el("td");tdL.dataset.l="الحساب";const wrap=el("div","links");
     if(r.link&&KINDS[r.link]){const k=KINDS[r.link];const a=el("a","lnk "+r.link,k.icon+`<span>${k.label}</span>`);a.href=r.url;a.target="_blank";a.rel="noopener noreferrer";a.title=r.url;wrap.appendChild(a);const cp=el("button","copy",ICON_COPY);cp.title="نسخ الرابط";cp.onclick=()=>copy(r.url);wrap.appendChild(cp);}
     else wrap.appendChild(el("span","none","لا يوجد رابط مسجّل"));
     tdL.appendChild(wrap);tr.appendChild(tdL);
+
+    // التقييم
     const tdR=el("td");tdR.dataset.l="التقييم";
-    tdR.innerHTML=r.rating!=null?`<span class="rate">★ ${r.rating.toFixed(1)} <small>(${(r.reviews||0).toLocaleString("ar-SA")})</small></span>`:'<span class="none">—</span>';
+    if(r._loading){tdR.innerHTML='<span class="skel" style="width:60px"></span>';}
+    else if(r.rating!=null){tdR.innerHTML=`<span class="rate">${ICON_STAR} ${r.rating.toFixed(1)} <small>(${(r.reviews||0).toLocaleString("ar-SA")})</small></span>`;}
+    else{tdR.innerHTML='<span class="none">—</span>';}
     tr.appendChild(tdR);
+
+    // الخريطة
     const tdM=el("td");tdM.dataset.l="الخريطة";
     if(r.maps){const a=el("a","mapbtn",ICON_MAP);a.href=r.maps;a.target="_blank";a.rel="noopener";a.title="فتح في خرائط قوقل";tdM.appendChild(a);}else tdM.innerHTML='<span class="none">—</span>';
-    tr.appendChild(tdM);tb.appendChild(tr);
+    tr.appendChild(tdM);
+    tb.appendChild(tr);
   });
   const has=state.rows.length>0;
   $("#q").disabled=!has;$("#csvBtn").disabled=!has;$("#clearBtn").disabled=!has;
-  $("#moreBox").hidden=!state.nextToken;
-  $("#count").innerHTML=has?`<b>${rows.length.toLocaleString("ar-SA")}</b> من ${state.rows.length.toLocaleString("ar-SA")} نتيجة${state.lastQuery?` · ${esc(state.lastQuery.type)} — ${esc(state.lastQuery.city)}`:""}${state.nextToken?' <span style="color:var(--ink-3)">· توجد صفحات إضافية</span>':""}`:(state.lastQuery?"لا نتائج مطابقة":"لم يبدأ البحث بعد");
+  $("#moreBox").hidden=!state.nextToken||state.isGrid;
+  $("#count").innerHTML=has?`<b>${rows.length.toLocaleString("ar-SA")}</b> من ${state.rows.length.toLocaleString("ar-SA")} نتيجة${state.lastQuery?` · ${esc(state.lastQuery.type)} — ${esc(state.lastQuery.city)}`:""}${state.isGrid?` <span style="color:var(--teal)">· شبكة مربعات (${state.apiCalls} طلب)</span>`:state.nextToken?' <span style="color:var(--ink-3)">· توجد صفحات إضافية</span>':""}`:(state.lastQuery?"لا نتائج مطابقة":"لم يبدأ البحث بعد");
+}
+
+function updateApiCounter(){
+  const pill=$("#apiPill");
+  if(pill)pill.innerHTML=`<span class="dot"></span> ${state.apiCalls} طلب قوقل`;
 }
 
 function setState(kind,msg){
   const box=$("#stateBox");box.innerHTML="";if(!kind)return;
-  if(kind==="loading"){const t=el("div","state");let h='<div style="display:grid;gap:12px;max-width:760px;margin:0 auto">';for(let i=0;i<6;i++)h+=`<div class="skel" style="width:${90-i*7}%"></div>`;t.innerHTML=h+'</div><p style="margin-top:16px">جاري سحب البيانات من خرائط قوقل…</p>';box.appendChild(t);return;}
+  if(kind==="loading"){const t=el("div","state");let h='<div style="display:grid;gap:12px;max-width:760px;margin:0 auto">';for(let i=0;i<6;i++)h+=`<div class="skel" style="width:${90-i*7}%"></div>`;t.innerHTML=h+'</div><p style="margin-top:16px">'+(state.isGrid?"جاري مسح المنطقة بشبكة مربعات…":"جاري سحب البيانات من خرائط قوقل…")+'</p>';box.appendChild(t);return;}
   if(kind==="idle"){box.appendChild(stateNode('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',"ابدأ بالبحث","اختر المنطقة ثم المدينة ثم نوع النشاط واضغط «بحث». ستظهر النتائج هنا في جدول قابل للفرز والتصفية والتصدير."));return;}
   if(kind==="empty"){box.appendChild(stateNode('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h10M4 17h7"/></svg>',"لا توجد نتائج","جرّب مدينة أخرى أو نشاطاً أوسع."));return;}
   if(kind==="error"){box.appendChild(stateNode('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v5m0 3h.01M10.3 3.9 2.6 17.4A2 2 0 0 0 4.3 20.4h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',"تعذّر جلب البيانات",esc(msg||""),true));}
@@ -178,7 +222,7 @@ function drawRecent(){
   let list=[];try{list=JSON.parse(localStorage.getItem("checker_recent")||"[]");}catch{}
   const box=$("#recent");box.hidden=!list.length;box.querySelectorAll(".chip").forEach(c=>c.remove());
   list.forEach(q=>{const b=el("button","chip",`${q.type} · ${q.city}`);b.type="button";
-    b.onclick=()=>{const ri=KSA.findIndex(([n])=>n===q.region);if(ri>=0){regionSel.value=ri;regionSel.dispatchEvent(new Event("change"));citySel.value=q.city==="كل المدن"?"":q.city;}typeSel.value=q.type;syncChips();search(false);};
+    b.onclick=()=>{const ri=KSA.findIndex(([n])=>n===q.region);if(ri>=0){regionSel.value=ri;regionSel.dispatchEvent(new Event("change"));citySel.value=q.city==="كل مدن"?"":q.city;}typeSel.value=q.type;syncChips();search(false);};
     box.appendChild(b);});
 }
 drawRecent();
